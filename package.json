@@ -2,9 +2,17 @@
   "name": "plume",
   "private": true,
   "packageManager": "pnpm@10.30.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
   "scripts": {
-    "test": "pnpm --filter @plume/model --filter @plume/collab --filter @plume/server test",
-    "typecheck": "pnpm --filter @plume/collab --filter @plume/server --filter @plume/editor typecheck",
+    "dev": "pnpm --filter @plume/demo dev",
+    "build": "pnpm --filter @plume/demo build",
+    "test": "pnpm --filter @plume/model --filter @plume/collab --filter @plume/server --filter @plume/demo test",
+    "preview": "pnpm --filter @plume/demo preview",
+    "typecheck": "pnpm --filter @plume/collab --filter @plume/server --filter @plume/editor --filter @plume/demo typecheck",
     "server": "pnpm --filter @plume/server start"
   }
 }

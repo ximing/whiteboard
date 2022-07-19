@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plume</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect fill='%2326292f' width='16' height='16'/%3E%3Cpath d='M4 12.5c2.2-6 5.8-6 8 0' fill='none' stroke='%234db6a7' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <script>
+      try {
+        var raw = localStorage.getItem('plume.board.v1');
+        if (raw) {
+          var saved = JSON.parse(raw);
+          if (saved.theme === 'dark' || saved.theme === 'light') {
+            document.documentElement.dataset.theme = saved.theme;
+          }
+        }
+      } catch (e) {}
+    </script>
+    <style>
+      #file-protocol-hint[hidden] { display: none !important; }
+      #file-protocol-hint {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        margin: 0;
+        padding: 48px 28px;
+        background: #26292f;
+        color: #f4f1e8;
+        font: 18px/1.5 Georgia, "Iowan Old Style", serif;
+      }
+      #file-protocol-hint h1 { font-size: 32px; font-weight: 600; margin: 0 0 12px; }
+      #file-protocol-hint pre {
+        display: inline-block;
+        margin: 12px 0;
+        padding: 10px 14px;
+        background: #1b1d20;
+        font: 15px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="file-protocol-hint" hidden>
+      <h1>Serve this folder over HTTP</h1>
+      <p>This build is a set of ES modules and cannot run from a file:// address. From the dist folder, start a static server:</p>
+      <pre>npx serve .</pre>
+      <p>From the repository, <code>pnpm preview</code> serves the production build.</p>
+    </div>
+    <div id="root"></div>
+    <script>
+      if (location.protocol === 'file:') {
+        var hint = document.getElementById('file-protocol-hint');
+        if (hint) hint.hidden = false;
+        var root = document.getElementById('root');
+        if (root) root.textContent = '';
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
