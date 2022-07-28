@@ -14,5 +14,8 @@
     "preview": "pnpm --filter @plume/demo preview",
     "typecheck": "pnpm --filter @plume/collab --filter @plume/server --filter @plume/editor --filter @plume/demo typecheck",
     "server": "pnpm --filter @plume/server start"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.0"
   }
 }
