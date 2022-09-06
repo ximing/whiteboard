@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {
-    "test": "pnpm --filter @plume/model test"
+    "test": "pnpm --filter @plume/model --filter @plume/collab test",
+    "typecheck": "pnpm --filter @plume/collab typecheck"
   }
 }
