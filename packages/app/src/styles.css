@@ -1,0 +1,11 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--canvas, #f6f4ee);
+}
+
+body { overflow: hidden; }
+
+#root { position: relative; }
