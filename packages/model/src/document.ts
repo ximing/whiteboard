@@ -1,9 +1,10 @@
-import { bboxOf, dist, localToWorld, pointInTriangle, polylineNear, worldToLocal } from './geometry';
+import { bboxOf, dist, localToWorld, pointInTriangle, pointSegmentDistance, polylineNear, worldToLocal } from './geometry';
 import { createId } from './id';
 import { recognizeShape, shapeFromRecognition } from './recognize';
 import { diffSteps, invertStep, applyStep } from './step';
 import type {
   BoardObject,
+  CommentObj,
   ConnectorObj,
   Document,
   EditorState,
@@ -15,6 +16,7 @@ import type {
   ShapeObj,
   ShapeStyle,
   Step,
+  StickyObj,
   StrokeObj,
   StrokePoint,
   TextObj,
@@ -109,6 +111,7 @@ function withObjects(doc: Document, objects: BoardObject[]): Document {
 export function makeStroke(points: StrokePoint[], props: { tool: 'pen' | 'highlighter'; color: string; size: number; id?: string }): StrokeObj {
   return {
     id: props.id ?? createId(),
+    z: 0,
     type: 'stroke',
     tool: props.tool,
     color: props.color,
@@ -121,8 +124,23 @@ export function makeStroke(points: StrokePoint[], props: { tool: 'pen' | 'highli
   };
 }
 
+export function paintOrder(objects: BoardObject[]): BoardObject[] {
+  return objects
+    .map((object, index) => ({ object, index, z: Number.isFinite(object.z) ? object.z : index }))
+    .sort((a, b) => a.z - b.z || a.index - b.index)
+    .map((entry) => entry.object);
+}
+
+function nextZ(objects: BoardObject[]): number {
+  let max = -1;
+  for (const object of objects) {
+    if (Number.isFinite(object.z) && object.z > max) max = object.z;
+  }
+  return max + 1;
+}
+
 export function addObject(doc: Document, object: BoardObject): Document {
-  return withObjects(doc, [...doc.objects, object]);
+  return withObjects(doc, [...doc.objects, { ...object, z: nextZ(doc.objects) }]);
 }
 
 export function commitFreehand(doc: Document, points: StrokePoint[], style: InkStyle & { tool: 'pen' | 'highlighter' }): Document {
@@ -142,14 +160,154 @@ export function commitFreehand(doc: Document, points: StrokePoint[], style: InkS
   return addObject(doc, makeStroke(path, style));
 }
 
+function pointNearPath(point: Point, path: Point[], reach: number): boolean {
+  return polylineNear([point], path, reach);
+}
+
+function spanRun(points: StrokePoint[]): StrokePoint[] {
+  if (points.length !== 1) return points;
+  const point = points[0];
+  return [point, { ...point, x: point.x + 0.01 }];
+}
+
+function eraseStroke(object: StrokeObj, eraserPath: Point[], radius: number): StrokeObj[] | null {
+  const points = object.points;
+  if (points.length === 0) return null;
+  const reach = object.size / 2 + radius;
+  const erased = points.map((point) => pointNearPath(point, eraserPath, reach));
+  const runs: StrokePoint[][] = [];
+  let current: StrokePoint[] = [];
+  let removed = false;
+  let split = false;
+  for (let index = 0; index < points.length; index++) {
+    if (erased[index]) {
+      removed = true;
+      if (current.length > 0) {
+        runs.push(current);
+        current = [];
+      }
+      continue;
+    }
+    const previous = current[current.length - 1];
+    if (previous && polylineNear([previous, points[index]], eraserPath, reach)) {
+      split = true;
+      runs.push(current);
+      current = [points[index]];
+      continue;
+    }
+    current.push(points[index]);
+  }
+  if (current.length > 0) runs.push(current);
+  if (!removed && !split) return null;
+  return runs.map((run, index) => {
+    const nextPoints = spanRun(run);
+    if (index === 0) return { ...object, points: nextPoints };
+    const created = makeStroke(nextPoints, { tool: object.tool, color: object.color, size: object.size });
+    return {
+      ...created,
+      z: object.z + index * 1e-3,
+      ...(object.locked ? { locked: object.locked } : {}),
+      ...(object.groupId ? { groupId: object.groupId } : {}),
+    };
+  });
+}
+
+function segmentHitsAabb(a: Point, b: Point, minX: number, minY: number, maxX: number, maxY: number): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const checks: Array<[number, number]> = [
+    [-dx, a.x - minX],
+    [dx, maxX - a.x],
+    [-dy, a.y - minY],
+    [dy, maxY - a.y],
+  ];
+  for (const [p, q] of checks) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else if (t < t0) {
+      return false;
+    } else if (t < t1) {
+      t1 = t;
+    }
+  }
+  return t0 <= t1;
+}
+
+function segmentHitsFrame(a: Point, b: Point, frame: Frame, pad: number): boolean {
+  const start = worldToLocal(a, frame);
+  const end = worldToLocal(b, frame);
+  return segmentHitsAabb(start, end, -frame.width / 2 - pad, -frame.height / 2 - pad, frame.width / 2 + pad, frame.height / 2 + pad);
+}
+
+function segmentHitsEllipse(a: Point, b: Point, frame: Frame, pad: number): boolean {
+  const start = worldToLocal(a, frame);
+  const end = worldToLocal(b, frame);
+  const rx = Math.max(frame.width / 2 + pad, 1e-6);
+  const ry = Math.max(frame.height / 2 + pad, 1e-6);
+  return pointSegmentDistance({ x: 0, y: 0 }, { x: start.x / rx, y: start.y / ry }, { x: end.x / rx, y: end.y / ry }) <= 1;
+}
+
+function segmentHitsObject(object: BoardObject, a: Point, b: Point, radius: number, doc: Document): boolean {
+  if (object.type === 'connector') {
+    const path = connectorPath(doc, object.id);
+    if (!path) return false;
+    return polylineNear(path, [a, b], object.strokeWidth / 2 + radius);
+  }
+  if (object.type === 'shape' && (object.kind === 'line' || object.kind === 'arrow')) {
+    const [start, end] = lineEndpoints(object);
+    return polylineNear([start, end], [a, b], object.strokeWidth / 2 + radius + 4);
+  }
+  if (object.type === 'shape' && object.kind === 'triangle') {
+    const [p, q, r] = triangleVertices(object);
+    return polylineNear([p, q, r, p], [a, b], object.strokeWidth / 2 + radius);
+  }
+  const frame = frameOf(object);
+  if (!frame) return false;
+  if (object.type === 'shape' && object.kind === 'ellipse') return segmentHitsEllipse(a, b, frame, radius);
+  return segmentHitsFrame(a, b, frame, radius);
+}
+
+function eraserHits(object: BoardObject, eraserPath: Point[], radius: number, doc: Document): boolean {
+  for (let index = 0; index < eraserPath.length; index++) {
+    if (hitsObject(object, eraserPath[index], radius, doc)) return true;
+    if (index > 0 && segmentHitsObject(object, eraserPath[index - 1], eraserPath[index], radius, doc)) return true;
+  }
+  return false;
+}
+
 export function applyEraser(doc: Document, eraserPath: Point[], radius: number): Document {
   if (eraserPath.length === 0) return doc;
-  const objects = doc.objects.filter((object) => {
-    if (object.type !== 'stroke') return true;
-    const reach = object.size / 2 + radius;
-    return !polylineNear(object.points, eraserPath, reach);
-  });
-  return objects.length === doc.objects.length ? doc : withObjects(doc, objects);
+  const objects: BoardObject[] = [];
+  let changed = false;
+  for (const object of doc.objects) {
+    if (object.locked) {
+      objects.push(object);
+      continue;
+    }
+    if (object.type === 'stroke') {
+      const pieces = eraseStroke(object, eraserPath, radius);
+      if (!pieces) objects.push(object);
+      else {
+        changed = true;
+        objects.push(...pieces);
+      }
+      continue;
+    }
+    if (eraserHits(object, eraserPath, radius, doc)) {
+      changed = true;
+      continue;
+    }
+    objects.push(object);
+  }
+  return changed ? followAnchors(doc, withObjects(doc, objects)) : doc;
 }
 
 export function shapeFromBox(kind: 'rect' | 'ellipse' | 'triangle', a: Point, b: Point, style: ShapeStyle, id = createId()): ShapeObj {
@@ -161,6 +319,7 @@ export function shapeFromBox(kind: 'rect' | 'ellipse' | 'triangle', a: Point, b:
   const height = Math.max(1, maxY - minY);
   const shape: ShapeObj = {
     id,
+    z: 0,
     type: 'shape',
     kind,
     cx: (minX + maxX) / 2,
@@ -186,6 +345,7 @@ export function lineFromPoints(a: Point, b: Point, kind: 'line' | 'arrow', style
   const width = Math.max(1, dist(a, b));
   return {
     id,
+    z: 0,
     type: 'shape',
     kind,
     cx: (a.x + b.x) / 2,
@@ -211,6 +371,7 @@ export function makeText(props: {
 }): TextObj {
   return {
     id: props.id ?? createId(),
+    z: 0,
     type: 'text',
     cx: props.cx,
     cy: props.cy,
@@ -229,11 +390,12 @@ export function makeImage(props: {
   width: number;
   height: number;
   mime: string;
-  dataUrl: string;
+  src: string;
   id?: string;
 }): ImageObj {
   return {
     id: props.id ?? createId(),
+    z: 0,
     type: 'image',
     cx: props.cx,
     cy: props.cy,
@@ -241,15 +403,91 @@ export function makeImage(props: {
     height: props.height,
     rotation: 0,
     mime: props.mime,
-    dataUrl: props.dataUrl,
+    src: props.src,
+  };
+}
+
+export function makeSticky(props: {
+  cx: number;
+  cy: number;
+  width?: number;
+  height?: number;
+  text?: string;
+  fill?: string;
+  color?: string;
+  fontSize?: number;
+  id?: string;
+}): StickyObj {
+  return {
+    id: props.id ?? createId(),
+    z: 0,
+    type: 'sticky',
+    cx: props.cx,
+    cy: props.cy,
+    width: props.width ?? 200,
+    height: props.height ?? 160,
+    rotation: 0,
+    text: props.text ?? 'Note',
+    fill: props.fill ?? '#efe3b0',
+    color: props.color ?? '#17324a',
+    fontSize: props.fontSize ?? 18,
+  };
+}
+
+export function makeComment(props: {
+  cx: number;
+  cy: number;
+  color?: string;
+  targetId?: string;
+  id?: string;
+}): CommentObj {
+  return {
+    id: props.id ?? createId(),
+    z: 0,
+    type: 'comment',
+    cx: props.cx,
+    cy: props.cy,
+    color: props.color ?? '#c47b16',
+    ...(props.targetId ? { targetId: props.targetId } : {}),
+    messages: [],
   };
 }
 
 export function updateText(doc: Document, id: string, text: string): Document {
   return withObjects(
     doc,
-    doc.objects.map((object) => (object.id === id && object.type === 'text' ? { ...object, text } : object)),
+    doc.objects.map((object) =>
+      object.id === id && (object.type === 'text' || object.type === 'sticky') ? { ...object, text } : object,
+    ),
   );
+}
+
+export function appendComment(doc: Document, id: string, message: { text: string; author?: string; at?: number }): Document {
+  const text = message.text.trim();
+  if (!text) return doc;
+  let changed = false;
+  const objects = doc.objects.map((object) => {
+    if (object.id !== id || object.type !== 'comment' || object.locked) return object;
+    changed = true;
+    return {
+      ...object,
+      messages: [
+        ...object.messages,
+        { id: createId(), text, author: message.author ?? '', at: message.at ?? Date.now() },
+      ],
+    };
+  });
+  return changed ? withObjects(doc, objects) : doc;
+}
+
+export function setCommentResolved(doc: Document, id: string, resolved: boolean): Document {
+  let changed = false;
+  const objects = doc.objects.map((object) => {
+    if (object.id !== id || object.type !== 'comment' || object.locked || !!object.resolved === resolved) return object;
+    changed = true;
+    return { ...object, resolved };
+  });
+  return changed ? withObjects(doc, objects) : doc;
 }
 
 export function addConnector(doc: Document, fromId: string, toId: string, style: { color: string; strokeWidth: number }): Document {
@@ -259,6 +497,7 @@ export function addConnector(doc: Document, fromId: string, toId: string, style:
   if (!from || !to || from.type === 'connector' || to.type === 'connector') return doc;
   const connector: ConnectorObj = {
     id: createId(),
+    z: 0,
     type: 'connector',
     fromId,
     toId,
@@ -280,6 +519,9 @@ export function centerOf(object: BoardObject): Point | null {
 
 export function frameOf(object: BoardObject): Frame | null {
   if (object.type === 'connector') return null;
+  if (object.type === 'comment') {
+    return { cx: object.cx, cy: object.cy, width: 28, height: 28, rotation: 0 };
+  }
   if (object.type === 'stroke') {
     if (object.points.length === 0) return null;
     const box = bboxOf(object.points);
@@ -350,6 +592,28 @@ export function anchorPoint(object: BoardObject, toward: Point): Point {
   return borderPoint(frame, toward, elliptical);
 }
 
+function pinnedSide(object: BoardObject, side: 'top' | 'right' | 'bottom' | 'left'): Point {
+  if (object.type === 'shape' && (object.kind === 'line' || object.kind === 'arrow')) {
+    const [start, end] = lineEndpoints(object);
+    if (side === 'left') return start;
+    if (side === 'right') return end;
+    if (side === 'top') return start.y <= end.y ? start : end;
+    return end.y >= start.y ? end : start;
+  }
+  const frame = frameOf(object);
+  if (!frame) return centerOf(object) ?? { x: 0, y: 0 };
+  const hx = frame.width / 2;
+  const hy = frame.height / 2;
+  const local =
+    side === 'left' ? { x: -hx, y: 0 } : side === 'right' ? { x: hx, y: 0 } : side === 'top' ? { x: 0, y: -hy } : { x: 0, y: hy };
+  return localToWorld(local, frame);
+}
+
+function anchorOn(object: BoardObject, toward: Point, side: ConnectorObj['fromSide']): Point {
+  if (!side || side === 'auto') return anchorPoint(object, toward);
+  return pinnedSide(object, side);
+}
+
 export function connectorEndpoints(doc: Document, connectorId: string): { from: Point; to: Point } | null {
   const connector = objectById(doc, connectorId);
   if (!connector || connector.type !== 'connector') return null;
@@ -360,16 +624,93 @@ export function connectorEndpoints(doc: Document, connectorId: string): { from: 
   const toCenter = centerOf(to);
   if (!fromCenter || !toCenter) return null;
   return {
-    from: anchorPoint(from, toCenter),
-    to: anchorPoint(to, fromCenter),
+    from: anchorOn(from, toCenter, connector.fromSide),
+    to: anchorOn(to, fromCenter, connector.toSide),
   };
+}
+
+function dedupePoints(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const previous = out[out.length - 1];
+    if (previous && previous.x === point.x && previous.y === point.y) continue;
+    out.push(point);
+  }
+  return out;
+}
+
+function elbowPoints(from: Point, to: Point): Point[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const midX = (from.x + to.x) / 2;
+    return dedupePoints([from, { x: midX, y: from.y }, { x: midX, y: to.y }, to]);
+  }
+  const midY = (from.y + to.y) / 2;
+  return dedupePoints([from, { x: from.x, y: midY }, { x: to.x, y: midY }, to]);
+}
+
+function curvePoints(from: Point, to: Point): Point[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const push = Math.min(80, length * 0.2);
+  if (length === 0) return [from, mid, to];
+  return [from, { x: mid.x - (dy / length) * push, y: mid.y + (dx / length) * push }, to];
+}
+
+/** Routed geometry. Hit testing, erasing, and export use this, not the straight chord. */
+export function connectorPath(doc: Document, connectorId: string): Point[] | null {
+  const connector = objectById(doc, connectorId);
+  if (!connector || connector.type !== 'connector') return null;
+  const ends = connectorEndpoints(doc, connectorId);
+  if (!ends) return null;
+  const route = connector.route ?? 'straight';
+  if (route === 'elbow') return elbowPoints(ends.from, ends.to);
+  if (route === 'curve') return curvePoints(ends.from, ends.to);
+  return [ends.from, ends.to];
+}
+
+function sameFrame(a: Frame, b: Frame): boolean {
+  return a.cx === b.cx && a.cy === b.cy && a.width === b.width && a.height === b.height && a.rotation === b.rotation;
+}
+
+/**
+ * A pin keeps its place on the target through moves, resizes, rotations, and scales.
+ * A pin that was transformed itself, or whose target is a connector, stays put.
+ */
+export function followAnchors(before: Document, after: Document): Document {
+  let changed = false;
+  const objects = after.objects.map((object) => {
+    if (object.type !== 'comment' || object.locked || !object.targetId) return object;
+    const previous = objectById(before, object.id);
+    if (previous?.type === 'comment' && (previous.cx !== object.cx || previous.cy !== object.cy)) return object;
+    const prevTarget = objectById(before, object.targetId);
+    const nextTarget = objectById(after, object.targetId);
+    if (!prevTarget || !nextTarget || nextTarget.type === 'connector') return object;
+    const oldFrame = frameOf(prevTarget);
+    const newFrame = frameOf(nextTarget);
+    if (!oldFrame || !newFrame || sameFrame(oldFrame, newFrame)) return object;
+    const local = worldToLocal({ x: object.cx, y: object.cy }, oldFrame);
+    const sx = oldFrame.width === 0 ? 1 : newFrame.width / oldFrame.width;
+    const sy = oldFrame.height === 0 ? 1 : newFrame.height / oldFrame.height;
+    const world = localToWorld({ x: local.x * sx, y: local.y * sy }, newFrame);
+    if (world.x === object.cx && world.y === object.cy) return object;
+    changed = true;
+    return { ...object, cx: world.x, cy: world.y };
+  });
+  return changed ? { ...after, objects } : after;
 }
 
 function mapSelected(doc: Document, ids: string[], mapper: (object: BoardObject) => BoardObject): Document {
   const selected = new Set(ids);
-  return withObjects(
+  return followAnchors(
     doc,
-    doc.objects.map((object) => (selected.has(object.id) ? mapper(object) : object)),
+    withObjects(
+      doc,
+      doc.objects.map((object) => (selected.has(object.id) && !object.locked ? mapper(object) : object)),
+    ),
   );
 }
 
@@ -420,7 +761,7 @@ function resizedStroke(object: StrokeObj, prev: Frame, next: Frame): StrokeObj {
 }
 
 function resizeObject(object: BoardObject, width: number, height: number): BoardObject {
-  if (object.type === 'connector') return object;
+  if (object.type === 'connector' || object.type === 'comment') return object;
   const frame = frameOf(object);
   if (!frame) return object;
   const nextWidth = Math.max(1, width);
@@ -428,9 +769,9 @@ function resizeObject(object: BoardObject, width: number, height: number): Board
   if (object.type === 'stroke') {
     return resizedStroke(object, frame, { ...frame, width: nextWidth, height: nextHeight });
   }
-  const sx = frame.width === 0 ? 1 : nextWidth / frame.width;
-  const sy = frame.height === 0 ? 1 : nextHeight / frame.height;
   if (object.type === 'shape') {
+    const sx = frame.width === 0 ? 1 : nextWidth / frame.width;
+    const sy = frame.height === 0 ? 1 : nextHeight / frame.height;
     return {
       ...object,
       width: nextWidth,
@@ -438,14 +779,14 @@ function resizeObject(object: BoardObject, width: number, height: number): Board
       localVertices: object.localVertices?.map((point) => ({ x: point.x * sx, y: point.y * sy })),
     };
   }
-  if (object.type === 'text') {
-    return { ...object, width: nextWidth, height: nextHeight, fontSize: object.fontSize * sy };
+  if (object.type === 'text' || object.type === 'sticky') {
+    return { ...object, width: nextWidth, height: nextHeight };
   }
   return { ...object, width: nextWidth, height: nextHeight };
 }
 
 export function scaleSelection(doc: Document, ids: string[], factor: number, origin?: Point): Document {
-  const selected = doc.objects.filter((object) => ids.includes(object.id));
+  const selected = doc.objects.filter((object) => ids.includes(object.id) && !object.locked);
   const frames = selected.map(frameOf).filter((frame): frame is Frame => frame !== null);
   const pivot =
     origin ??
@@ -460,6 +801,13 @@ export function scaleSelection(doc: Document, ids: string[], factor: number, ori
 
 function scaleObject(object: BoardObject, factor: number, origin: Point): BoardObject {
   if (object.type === 'connector') return object;
+  if (object.type === 'comment') {
+    return {
+      ...object,
+      cx: origin.x + (object.cx - origin.x) * factor,
+      cy: origin.y + (object.cy - origin.y) * factor,
+    };
+  }
   if (object.type === 'stroke') {
     return {
       ...object,
@@ -485,7 +833,9 @@ function scaleObject(object: BoardObject, factor: number, origin: Point): BoardO
       localVertices: object.localVertices?.map((point) => ({ x: point.x * factor, y: point.y * factor })),
     };
   }
-  if (object.type === 'text') return { ...object, cx, cy, width, height, fontSize: object.fontSize * factor };
+  if (object.type === 'text' || object.type === 'sticky') {
+    return { ...object, cx, cy, width, height, fontSize: object.fontSize * factor };
+  }
   return { ...object, cx, cy, width, height };
 }
 
@@ -499,6 +849,13 @@ export function rotateSelection(doc: Document, ids: string[], angle: number, ori
 
 function rotateObject(object: BoardObject, angle: number, origin: Point): BoardObject {
   if (object.type === 'connector') return object;
+  if (object.type === 'comment') {
+    const dx = object.cx - origin.x;
+    const dy = object.cy - origin.y;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return { ...object, cx: origin.x + dx * cos - dy * sin, cy: origin.y + dx * sin + dy * cos };
+  }
   if (object.type === 'stroke') {
     return {
       ...object,
@@ -525,14 +882,33 @@ function rotateObject(object: BoardObject, angle: number, origin: Point): BoardO
 
 export function deleteSelection(doc: Document, ids: string[]): Document {
   const selected = new Set(ids);
-  return withObjects(
-    doc,
-    doc.objects.filter((object) => {
-      if (selected.has(object.id)) return false;
-      if (object.type === 'connector' && (selected.has(object.fromId) || selected.has(object.toId))) return false;
-      return true;
-    }),
-  );
+  const removed = new Set(doc.objects.filter((object) => selected.has(object.id) && !object.locked).map((object) => object.id));
+  if (removed.size === 0) return doc;
+  let changed = false;
+  const objects: BoardObject[] = [];
+  for (const object of doc.objects) {
+    if (removed.has(object.id)) {
+      changed = true;
+      continue;
+    }
+    if (
+      object.type === 'connector' &&
+      !object.locked &&
+      (removed.has(object.fromId) || removed.has(object.toId))
+    ) {
+      changed = true;
+      continue;
+    }
+    if (object.type === 'comment' && object.targetId && removed.has(object.targetId)) {
+      changed = true;
+      const next = { ...object };
+      delete next.targetId;
+      objects.push(next);
+      continue;
+    }
+    objects.push(object);
+  }
+  return changed ? withObjects(doc, objects) : doc;
 }
 
 export function setLineEndpoint(shape: ShapeObj, which: 'start' | 'end', world: Point): ShapeObj {
@@ -558,7 +934,7 @@ const HANDLE_SIGNS = {
 export type BoxHandle = keyof typeof HANDLE_SIGNS;
 
 export function dragHandle(object: BoardObject, handle: BoxHandle, world: Point): BoardObject {
-  if (object.type === 'connector') return object;
+  if (object.locked || object.type === 'connector' || object.type === 'comment') return object;
   const frame = frameOf(object);
   if (!frame) return object;
   const [sx, sy] = HANDLE_SIGNS[handle];
@@ -590,7 +966,7 @@ function placeResized(object: BoardObject, prev: Frame, next: Frame): BoardObjec
       localVertices: object.localVertices?.map((point) => ({ x: point.x * sx, y: point.y * sy })),
     };
   }
-  if (object.type === 'text') {
+  if (object.type === 'text' || object.type === 'sticky') {
     return {
       ...object,
       cx: next.cx,
@@ -598,9 +974,9 @@ function placeResized(object: BoardObject, prev: Frame, next: Frame): BoardObjec
       width: next.width,
       height: next.height,
       rotation: next.rotation,
-      fontSize: Math.max(8, object.fontSize * sy),
     };
   }
+  if (object.type === 'comment') return object;
   return {
     ...object,
     cx: next.cx,
@@ -613,9 +989,9 @@ function placeResized(object: BoardObject, prev: Frame, next: Frame): BoardObjec
 
 function hitsObject(object: BoardObject, world: Point, pad: number, doc: Document): boolean {
   if (object.type === 'connector') {
-    const ends = connectorEndpoints(doc, object.id);
-    if (!ends) return false;
-    return polylineNear([ends.from, ends.to], [world], object.strokeWidth / 2 + pad);
+    const path = connectorPath(doc, object.id);
+    if (!path) return false;
+    return polylineNear(path, [world], object.strokeWidth / 2 + pad);
   }
   if (object.type === 'stroke') {
     return polylineNear(object.points, [world], object.size / 2 + pad);
@@ -641,8 +1017,9 @@ function hitsObject(object: BoardObject, world: Point, pad: number, doc: Documen
 }
 
 export function hitTest(doc: Document, world: Point, pad = 6): BoardObject | null {
-  for (let index = doc.objects.length - 1; index >= 0; index--) {
-    const object = doc.objects[index];
+  const ordered = paintOrder(doc.objects);
+  for (let index = ordered.length - 1; index >= 0; index--) {
+    const object = ordered[index];
     if (hitsObject(object, world, pad, doc)) return object;
   }
   return null;
@@ -658,9 +1035,9 @@ export function objectsInRect(doc: Document, a: Point, b: Point): string[] {
       const center = centerOf(object);
       if (center) return center.x >= minX && center.x <= maxX && center.y >= minY && center.y <= maxY;
       if (object.type === 'connector') {
-        const ends = connectorEndpoints(doc, object.id);
-        if (!ends) return false;
-        return [ends.from, ends.to].some((point) => point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY);
+        const path = connectorPath(doc, object.id);
+        if (!path) return false;
+        return path.some((point) => point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY);
       }
       return false;
     })
