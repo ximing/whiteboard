@@ -114,6 +114,23 @@ export function bboxOf(points: Point[]): { minX: number; minY: number; maxX: num
   return { minX, minY, maxX, maxY };
 }
 
+export function fitView(
+  viewport: { width: number; height: number },
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  padding = 64,
+): View {
+  const spanX = bounds.maxX - bounds.minX === 0 ? 1 : bounds.maxX - bounds.minX;
+  const spanY = bounds.maxY - bounds.minY === 0 ? 1 : bounds.maxY - bounds.minY;
+  const zoom = clamp(Math.min((viewport.width - 2 * padding) / spanX, (viewport.height - 2 * padding) / spanY), 0.15, 8);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  return {
+    zoom,
+    panX: viewport.width / 2 - centerX * zoom,
+    panY: viewport.height / 2 - centerY * zoom,
+  };
+}
+
 export function pointInTriangle(point: Point, a: Point, b: Point, c: Point): boolean {
   const sign = (p: Point, q: Point, r: Point) => (p.x - r.x) * (q.y - r.y) - (q.x - r.x) * (p.y - r.y);
   const d1 = sign(point, a, b);
