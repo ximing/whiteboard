@@ -259,6 +259,7 @@ export function recognizeShape(points: Point[]): RecognizedShape | null {
 export function shapeFromRecognition(recognized: RecognizedShape, style: ShapeStyle): ShapeObj {
   return {
     id: createId(),
+    z: 0,
     type: 'shape',
     kind: recognized.kind,
     cx: recognized.cx,

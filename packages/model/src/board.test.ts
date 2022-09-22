@@ -151,6 +151,9 @@ describe('board model', () => {
     expect(stylusOnPan).toBe('draw');
     expect(routePointer({ pointerType: 'mouse', tool: 'pan' })).toBe('pan');
     expect(routePointer({ pointerType: 'mouse', tool: 'eraser' })).toBe('erase');
+    expect(routePointer({ pointerType: 'mouse', tool: 'laser' })).toBe('laser');
+    expect(routePointer({ pointerType: 'pen', tool: 'laser' })).toBe('laser');
+    expect(routePointer({ pointerType: 'touch', tool: 'laser' })).toBe('pan');
   });
 
   it('an eraser path drops only intersecting strokes', () => {
@@ -159,6 +162,7 @@ describe('board model', () => {
     const miss = makeStroke(straightPath(160), { tool: 'pen', color: '#1d4e89', size: 8, id: 'miss' });
     const shape: ShapeObj = {
       id: 'box',
+      z: 0,
       type: 'shape',
       kind: 'rect',
       cx: 40,
@@ -174,8 +178,8 @@ describe('board model', () => {
     const erased = applyEraser(
       doc,
       [
-        { x: 50, y: -30 },
-        { x: 50, y: 30 },
+        { x: -20, y: 0 },
+        { x: 300, y: 0 },
       ],
       6,
     );
@@ -249,6 +253,7 @@ describe('board model', () => {
   it('moving a connected object changes connector endpoints to that object’s new anchors', () => {
     const left: ShapeObj = {
       id: 'left',
+      z: 0,
       type: 'shape',
       kind: 'rect',
       cx: 0,
@@ -262,6 +267,7 @@ describe('board model', () => {
     };
     const right: ShapeObj = {
       id: 'right',
+      z: 0,
       type: 'shape',
       kind: 'rect',
       cx: 240,
@@ -300,6 +306,7 @@ describe('board model', () => {
   it('selection move, resize, rotate, and delete match the same model’s geometry', () => {
     const shape: ShapeObj = {
       id: 'card',
+      z: 0,
       type: 'shape',
       kind: 'rect',
       cx: 100,
@@ -352,7 +359,7 @@ describe('board model', () => {
         width: 10,
         height: 10,
         mime: 'image/png',
-        dataUrl: payload,
+        src: payload,
       }),
     );
     doc = setTheme(doc, 'dark');
@@ -360,11 +367,11 @@ describe('board model', () => {
     const copy = deserialize(serialize(doc));
     const image = copy.objects.find((object) => object.type === 'image');
     console.log(
-      `serialize then deserialize deep-equals the document, including image payload and theme: theme ${copy.theme}; image bytes match ${image?.type === 'image' && image.dataUrl === payload}; equal ${JSON.stringify(copy) === JSON.stringify(doc)}`,
+      `serialize then deserialize deep-equals the document, including image payload and theme: theme ${copy.theme}; image bytes match ${image?.type === 'image' && image.src === payload}; equal ${JSON.stringify(copy) === JSON.stringify(doc)}`,
     );
     expect(copy).toEqual(doc);
     expect(copy.theme).toBe('dark');
     expect(image?.type).toBe('image');
-    if (image?.type === 'image') expect(image.dataUrl).toBe(payload);
+    if (image?.type === 'image') expect(image.src).toBe(payload);
   });
 });

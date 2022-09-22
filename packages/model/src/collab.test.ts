@@ -21,6 +21,7 @@ import {
 function shape(id: string, cx: number, color: string): ShapeObj {
   return {
     id,
+    z: 0,
     type: 'shape',
     kind: 'rect',
     cx,
