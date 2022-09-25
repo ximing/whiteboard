@@ -25,8 +25,14 @@ function actionForTool(tool: Tool, penNeverPans: boolean): RoutedAction {
       return 'shape';
     case 'text':
       return 'text';
+    case 'sticky':
+      return 'sticky';
+    case 'comment':
+      return 'comment';
     case 'connector':
       return 'connector';
+    case 'laser':
+      return 'laser';
     case 'image':
       return 'none';
     default:
