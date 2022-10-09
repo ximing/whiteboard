@@ -8,7 +8,7 @@ import {
   type Step,
 } from '@plume/model';
 import { decideOpen } from './decide';
-import type { CollabEvent, CollabProvider, CollabSession, OpenDecision } from './types';
+import { cleanPresence, cursorColor, type CollabEvent, type CollabProvider, type CollabSession, type OpenDecision } from './types';
 
 const ROOM_KEY = 'plume.room.v1';
 const CHANNEL = 'plume.collab.v1';
@@ -18,7 +18,19 @@ type Submit = { kind: 'submit'; clientID: string; version: number; steps: Step[]
 type Accepted = { kind: 'accepted'; clientID: string; version: number; steps: Step[] };
 type Catchup = { kind: 'catchup'; clientID: string; from: number; steps: Step[] | null; version: number; doc: Document };
 type Hello = { kind: 'hello'; clientID: string };
-type Wire = Submit | Accepted | Catchup | Hello;
+type Cursor = {
+  kind: 'cursor';
+  clientID: string;
+  x: number;
+  y: number;
+  color: string;
+  name?: string;
+  active: boolean;
+  trail?: { x: number; y: number }[];
+  presenting?: boolean;
+  view?: { panX: number; panY: number; zoom: number };
+};
+type Wire = Submit | Accepted | Catchup | Hello | Cursor;
 
 function isRoom(value: unknown): value is RoomLog {
   if (!value || typeof value !== 'object') return false;
@@ -30,7 +42,11 @@ function isRoom(value: unknown): value is RoomLog {
  * Same-browser authority. `BroadcastChannel` carries steps and `navigator.locks`
  * orders them. Enough for the demo site. A product uses `createServerProvider`.
  */
-export function createLocalProvider(): CollabProvider {
+export function createLocalProvider(boardId?: string): CollabProvider {
+  const roomKey = boardId ? `${ROOM_KEY}:${boardId}` : ROOM_KEY;
+  const channelName = boardId ? `${CHANNEL}:${boardId}` : CHANNEL;
+  const lockName = boardId ? `${LOCK}:${boardId}` : LOCK;
+  let cursorAt = 0;
   let channel: BroadcastChannel | null = null;
   let timer = 0;
   let ready = false;
@@ -50,7 +66,7 @@ export function createLocalProvider(): CollabProvider {
 
   function readRoom(): RoomLog | null {
     try {
-      const raw = localStorage.getItem(ROOM_KEY);
+      const raw = localStorage.getItem(roomKey);
       if (raw) {
         const parsed = JSON.parse(raw) as unknown;
         if (isRoom(parsed)) {
@@ -67,14 +83,14 @@ export function createLocalProvider(): CollabProvider {
   function writeRoom(room: RoomLog) {
     memory = room;
     try {
-      localStorage.setItem(ROOM_KEY, JSON.stringify(room));
+      localStorage.setItem(roomKey, JSON.stringify(room));
     } catch {
       /* Other tabs still hear the accepted broadcast. */
     }
   }
 
   function lock<T>(body: () => T): Promise<T> {
-    if (typeof navigator !== 'undefined' && navigator.locks) return navigator.locks.request(LOCK, body);
+    if (typeof navigator !== 'undefined' && navigator.locks) return navigator.locks.request(lockName, body);
     return Promise.resolve(body());
   }
 
@@ -130,6 +146,22 @@ export function createLocalProvider(): CollabProvider {
       publishPeers();
       return;
     }
+    if (message.kind === 'cursor') {
+      if (message.clientID === clientID) return;
+      emit({
+        type: 'cursor',
+        clientId: message.clientID,
+        x: message.x,
+        y: message.y,
+        color: message.color,
+        name: message.name,
+        active: message.active,
+        trail: message.trail,
+        presenting: message.presenting,
+        view: message.view,
+      });
+      return;
+    }
     if (message.kind === 'accepted') {
       if (message.clientID === clientID) return;
       if (latest.collab.version + message.steps.length === message.version) {
@@ -173,7 +205,7 @@ export function createLocalProvider(): CollabProvider {
         emit({ type: 'status', status: 'live' });
         return null;
       }
-      const mine = new BroadcastChannel(CHANNEL);
+      const mine = new BroadcastChannel(channelName);
       channel = mine;
       mine.onmessage = onMessage;
       peers.set(clientID, Date.now());
@@ -208,6 +240,25 @@ export function createLocalProvider(): CollabProvider {
         });
       }, 3000);
       return decision;
+    },
+    presence(cursor) {
+      if (!ready || closed) return;
+      const now = Date.now();
+      if (cursor && now - cursorAt < 40) return;
+      cursorAt = now;
+      const clean = cleanPresence(cursor);
+      post({
+        kind: 'cursor',
+        clientID,
+        x: clean?.x ?? 0,
+        y: clean?.y ?? 0,
+        color: clean?.color || cursorColor(clientID),
+        name: clean?.name,
+        active: !!clean,
+        trail: clean?.trail,
+        presenting: clean?.presenting,
+        view: clean?.view,
+      });
     },
     sync(state: EditorState) {
       latest = state;

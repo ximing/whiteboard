@@ -3,7 +3,7 @@ import type { CollabEvent, OpenDecision } from './types';
 
 /** Apply one provider event to the editor. Peers and link status do not touch the document. */
 export function reduceCollab(state: EditorState, event: CollabEvent | OpenDecision): EditorState {
-  if (!event || event.type === 'peers' || event.type === 'status') return state;
+  if (!event || event.type === 'peers' || event.type === 'status' || event.type === 'cursor') return state;
   if (event.type === 'confirm') {
     if (state.collab.version >= event.version) return state;
     return confirmSteps(state, event.count, event.version);

@@ -1,6 +1,6 @@
 import type { EditorState, RoomLog } from '@plume/model';
 import { decideOpen } from './decide';
-import type { CollabProvider, CollabSession, OpenDecision } from './types';
+import { cleanPresence, cursorColor, type CollabProvider, type CollabSession, type OpenDecision } from './types';
 import type { ClientWire, ServerWire } from './wire';
 
 export type ServerProviderOptions = {
@@ -30,7 +30,7 @@ const OPEN = 1;
 function isServerWire(value: unknown): value is ServerWire {
   if (!value || typeof value !== 'object') return false;
   const kind = (value as { kind?: unknown }).kind;
-  return kind === 'welcome' || kind === 'accepted' || kind === 'catchup' || kind === 'peers' || kind === 'rejected';
+  return kind === 'welcome' || kind === 'accepted' || kind === 'catchup' || kind === 'peers' || kind === 'presence' || kind === 'rejected';
 }
 
 /**
@@ -87,6 +87,23 @@ export function createServerProvider(options: ServerProviderOptions): CollabProv
     }
     if (message.kind === 'peers') {
       session.emit({ type: 'peers', count: message.count });
+      return handshake;
+    }
+    if (message.kind === 'presence') {
+      if (message.clientId !== clientId) {
+        session.emit({
+          type: 'cursor',
+          clientId: message.clientId,
+          x: message.x,
+          y: message.y,
+          color: message.color,
+          name: message.name,
+          active: message.active,
+          trail: message.trail,
+          presenting: message.presenting,
+          view: message.view,
+        });
+      }
       return handshake;
     }
     if (message.kind === 'accepted') {
@@ -225,6 +242,22 @@ export function createServerProvider(options: ServerProviderOptions): CollabProv
           finish(null);
         }, 8000);
         open(finish, gen);
+      });
+    },
+    presence(cursor) {
+      if (!ready || closed) return;
+      const clean = cleanPresence(cursor);
+      send({
+        kind: 'presence',
+        clientId,
+        x: clean?.x ?? 0,
+        y: clean?.y ?? 0,
+        color: clean?.color || cursorColor(clientId),
+        name: clean?.name,
+        active: !!clean,
+        trail: clean?.trail,
+        presenting: clean?.presenting,
+        view: clean?.view,
       });
     },
     sync(state) {
