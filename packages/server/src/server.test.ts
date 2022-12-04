@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServerProvider, reduceCollab, type CollabEvent, type CollabSession } from '@plume/collab';
 import { addObject, commit, createDocument, createEditor, makeStroke, undo, type EditorState } from '@plume/model';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -116,6 +119,41 @@ describe('server provider', () => {
     expect(alice.state.doc.objects.length).toBe(0);
     expect(bob.state.doc.objects.length).toBe(0);
     expect(bob.state.collab.version).toBeGreaterThan(0);
+  });
+
+  it('restores a stroke from dataDir after the authority restarts', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'plume-'));
+    try {
+      server = await createPlumeServer({ port: 0, dataDir });
+      const author = connectClient(server.url, 'persist-board');
+      await author.start();
+      const stroke = makeStroke(
+        [
+          { x: 4, y: 6 },
+          { x: 40, y: 18 },
+          { x: 70, y: 8 },
+        ],
+        { tool: 'pen', color: '#1d4e89', size: 4, id: 'stroke-persist' },
+      );
+      author.state = commit(author.state, addObject(author.state.doc, stroke));
+      author.provider.sync(author.state);
+      await waitFor(
+        () =>
+          author.state.collab.unconfirmed.length === 0 &&
+          author.state.collab.version > 0 &&
+          author.state.doc.objects.some((object) => object.id === 'stroke-persist'),
+      );
+      author.provider.disconnect();
+      await server.close();
+      server = null;
+
+      server = await createPlumeServer({ port: 0, dataDir });
+      const reader = connectClient(server.url, 'persist-board');
+      await reader.start();
+      expect(reader.state.doc.objects.some((object) => object.id === 'stroke-persist')).toBe(true);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 
   it('rejects a token the account hook does not accept', async () => {

@@ -32,8 +32,12 @@ function isDocument(value: unknown): value is Document {
   );
 }
 
-export function createHub(options?: { authorize?: Authorize }) {
-  const rooms = new Map<string, RoomLog>();
+export function createHub(options?: {
+  authorize?: Authorize;
+  rooms?: Map<string, RoomLog>;
+  onRoom?: (boardId: string, room: RoomLog) => void | Promise<void>;
+}) {
+  const rooms = options?.rooms ?? new Map<string, RoomLog>();
   const members = new Map<string, Set<Member>>();
   const chains = new Map<string, Promise<unknown>>();
 
@@ -73,6 +77,7 @@ export function createHub(options?: { authorize?: Authorize }) {
         if (!room) {
           room = seedRoom(isDocument(hello.doc) ? hello.doc : createDocument());
           rooms.set(boardId, room);
+          await options?.onRoom?.(boardId, room);
         }
         const member: Member = { send: client.send, id: hello.clientId, boardId, userId: auth.userId };
         let group = members.get(boardId);
@@ -104,6 +109,7 @@ export function createHub(options?: { authorize?: Authorize }) {
         const result = authorityReceive(room, version, steps);
         if (result.type === 'accepted') {
           rooms.set(member.boardId, result.room);
+          await options?.onRoom?.(member.boardId, result.room);
           broadcast(member.boardId, {
             kind: 'accepted',
             clientId: member.id,
@@ -136,6 +142,25 @@ export function createHub(options?: { authorize?: Authorize }) {
           doc: room.doc,
         });
       });
+    },
+
+    presence(
+      member: Member,
+      cursor: {
+        x: number;
+        y: number;
+        color: string;
+        name?: string;
+        active: boolean;
+        trail?: { x: number; y: number }[];
+        presenting?: boolean;
+        view?: { panX: number; panY: number; zoom: number };
+      },
+    ) {
+      for (const other of members.get(member.boardId) ?? []) {
+        if (other.id === member.id) continue;
+        other.send({ kind: 'presence', clientId: member.id, ...cursor });
+      }
     },
 
     leave(member: Member) {
