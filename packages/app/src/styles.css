@@ -9,3 +9,76 @@ body,
 body { overflow: hidden; }
 
 #root { position: relative; }
+
+.boards {
+  position: absolute;
+  z-index: 6;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-family: Figtree, "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.boards-current,
+.boards-menu button,
+.boards-row input {
+  font: inherit;
+  color: var(--ink, #26292f);
+}
+
+.boards-current {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #e4dfd2);
+  border-radius: 10px;
+  background: var(--panel, #fdfcf8);
+  cursor: pointer;
+}
+
+.boards-switch { position: relative; }
+
+.boards-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  gap: 6px;
+  width: 240px;
+  padding: 8px;
+  border: 1px solid var(--line, #e4dfd2);
+  border-radius: 12px;
+  background: var(--panel, #fdfcf8);
+  box-shadow: 0 12px 32px -12px rgb(38 35 28 / 20%);
+}
+
+.boards-row {
+  display: grid;
+  gap: 4px;
+}
+
+.boards-name,
+.boards-actions button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.boards-name[aria-current='true'] { font-weight: 600; }
+
+.boards-row input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid var(--line, #e4dfd2);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.boards-actions {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 4px;
+}

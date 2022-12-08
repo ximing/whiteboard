@@ -24,13 +24,13 @@ import { loadBest, preparePersist } from './storage';
 function stripImages(doc: Document): Document {
   return {
     ...doc,
-    objects: doc.objects.map((object) => (object.type === 'image' ? { ...object, dataUrl: '' } : object)),
+    objects: doc.objects.map((object) => (object.type === 'image' ? { ...object, src: '' } : object)),
   };
 }
 
 function imageUrl(doc: Document, id: string): string | null {
   const object = objectById(doc, id);
-  return object?.type === 'image' ? object.dataUrl : null;
+  return object?.type === 'image' ? object.src : null;
 }
 
 describe('reload after undo', () => {
@@ -73,7 +73,7 @@ describe('image hydration', () => {
         width: 16,
         height: 16,
         mime: 'image/png',
-        dataUrl: payload,
+        src: payload,
       }),
     );
     const stripped = stripImages(doc);
@@ -99,7 +99,7 @@ describe('image hydration', () => {
         width: 12,
         height: 12,
         mime: 'image/png',
-        dataUrl: payload,
+        src: payload,
       }),
     );
     const newerStripped = commit(createEditor(doc), stripImages(doc)).doc;
