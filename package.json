@@ -1,0 +1,52 @@
+{
+  "private": true,
+  "author": "ximing <ximing@meituan.com>",
+  "scripts": {
+    "dev": "max dev",
+    "build": "max build",
+    "prepare": "husky install",
+    "postinstall": "max setup",
+    "setup": "max setup",
+    "start": "npm run dev"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^4.7.0",
+    "@umijs/max": "^4.0.7",
+    "antd": "5",
+    "reflect-metadata": "0.1.13",
+    "shortid": "^2.2.16",
+    "socket.io-client": "^2.0.1",
+    "react": "^18.0.0",
+    "react-copy-to-clipboard": "^5.0.1",
+    "react-dnd": "^16.0.0",
+    "react-dnd-html5-backend": "^16.0.0",
+    "react-dom": "^18.0.0",
+    "react-draggable": "^4.4.3",
+    "ky": "^0.23.0",
+    "moment": "^2.29.1",
+    "p-queue": "^6.6.2",
+    "p-retry": "^4.2.0",
+    "query-string": "^6.13.8",
+    "inversify": "^5.0.5",
+    "inversify-inject-decorators": "3.1.0",
+    "clsx": "1.1.1",
+    "@rsjs/core": "^2.0.0",
+    "@types/react-color": "^3.0.4",
+    "@types/react-copy-to-clipboard": "^5.0.0",
+    "tslib": "^2.3.1",
+    "konva": "^8.3.12",
+    "react-konva": "^18.2.1",
+    "scroller": "^0.0.3",
+    "tiny-invariant": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "husky": "^8.0.1",
+    "lint-staged": "^13.0.3",
+    "prettier": "^2",
+    "prettier-plugin-organize-imports": "^2",
+    "prettier-plugin-packagejson": "^2",
+    "typescript": "^4.1.2"
+  }
+}
