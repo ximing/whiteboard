@@ -54,7 +54,7 @@ export const Board: React.FC = () => {
     stage.on('mouseup touchend', function () {
       isPaint = false;
     });
-
+    let pre: any = {};
     // and core function - drawing
     stage.on('mousemove touchmove', function (e) {
       if (!isPaint) {
@@ -63,7 +63,12 @@ export const Board: React.FC = () => {
       // prevent scrolling on touch devices
       e.evt.preventDefault();
       const pos = stage.getPointerPosition()!;
-      var newPoints = lastLine.points().concat([pos.x, pos.y]);
+      if (pre.x === pos.x && pre.y === pos.y) {
+        return;
+      }
+      pre = pos;
+      console.log('--->', pos.x, pos.y);
+      const newPoints = lastLine.points().concat([pos.x, pos.y]);
       lastLine.points(newPoints);
     });
   }, []);
