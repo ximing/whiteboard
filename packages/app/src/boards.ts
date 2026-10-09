@@ -30,9 +30,9 @@ export function listBoards(): BoardMeta[] {
   return [home];
 }
 
-export function createBoard(): BoardMeta {
+export function createBoard(title?: string): BoardMeta {
   const boards = listBoards();
-  const board: BoardMeta = { id: createId(), title: `Board ${boards.length + 1}`, updated: Date.now() };
+  const board: BoardMeta = { id: createId(), title: title?.trim() || `Board ${boards.length + 1}`, updated: Date.now() };
   writeIndex([board, ...boards]);
   return board;
 }

@@ -30,7 +30,7 @@
   inset: 0;
   overflow: hidden;
   color: var(--ink);
-  font-family: Figtree, "Avenir Next", "Segoe UI", sans-serif;
+  font-family: Figtree, "PingFang SC", "Noto Sans SC", "Avenir Next", "Segoe UI", sans-serif;
   touch-action: none;
 }
 
@@ -196,7 +196,7 @@
   border-radius: 6px;
   background: var(--chrome);
   color: var(--chrome-ink);
-  font-family: Figtree, "Avenir Next", "Segoe UI", sans-serif;
+  font-family: Figtree, "PingFang SC", "Noto Sans SC", "Avenir Next", "Segoe UI", sans-serif;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.35;
@@ -520,6 +520,63 @@
   box-shadow: 0 12px 32px -12px rgb(38 35 28 / 20%);
   cursor: pointer;
   touch-action: none;
+}
+
+.export-menu { position: relative; }
+
+.export-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  width: 232px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px -12px rgb(38 35 28 / 28%);
+  text-align: left;
+}
+
+.export-panel h2 {
+  margin: 0 2px 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plume .export-panel button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.plume .export-panel button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.export-grid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lang-toggle {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .plume .follow {

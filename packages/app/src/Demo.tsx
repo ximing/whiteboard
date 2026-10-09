@@ -1,5 +1,5 @@
 import { createLocalProvider, createServerProvider } from '@plume/collab';
-import { PlumeEditor } from '@plume/editor';
+import { PlumeEditor, useTranslation } from '@plume/editor';
 import { useMemo, useState } from 'react';
 import { createBoard, listBoards, removeBoard, renameBoard, type BoardMeta } from './boards';
 import { browserStorageFor } from './storage';
@@ -13,6 +13,7 @@ function demoName(): string {
 }
 
 export function Demo() {
+  const { t } = useTranslation();
   const [boards, setBoards] = useState<BoardMeta[]>(() => listBoards());
   const [active, setActive] = useState(() => listBoards()[0].id);
   const [open, setOpen] = useState(false);
@@ -32,7 +33,7 @@ export function Demo() {
       <div className="boards">
         <div className="boards-switch">
           <button type="button" className="boards-current" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-            {current?.title ?? 'Board'}
+            {current?.title ?? t('demo.fallback')}
           </button>
           {open && (
             <div className="boards-menu" role="menu">
@@ -50,7 +51,7 @@ export function Demo() {
                     {board.title}
                   </button>
                   <input
-                    aria-label={`Rename ${board.title}`}
+                    aria-label={t('demo.rename', { title: board.title })}
                     defaultValue={board.title}
                     onBlur={(event) => setBoards(renameBoard(board.id, event.target.value))}
                   />
@@ -60,13 +61,13 @@ export function Demo() {
                 <button
                   type="button"
                   onClick={() => {
-                    const board = createBoard();
+                    const board = createBoard(t('demo.boardName', { n: boards.length + 1 }));
                     setBoards(listBoards());
                     setActive(board.id);
                     setOpen(false);
                   }}
                 >
-                  New board
+                  {t('demo.newBoard')}
                 </button>
                 {boards.length > 1 && (
                   <button
@@ -78,7 +79,7 @@ export function Demo() {
                       setOpen(false);
                     }}
                   >
-                    Delete
+                    {t('demo.delete')}
                   </button>
                 )}
               </div>
@@ -91,7 +92,7 @@ export function Demo() {
           aria-pressed={authority === 'server'}
           onClick={() => setAuthority((value) => (value === 'local' ? 'server' : 'local'))}
         >
-          {authority === 'server' ? 'Server' : 'Local'}
+          {authority === 'server' ? t('demo.server') : t('demo.local')}
         </button>
         <button
           type="button"
@@ -99,7 +100,7 @@ export function Demo() {
           aria-pressed={readOnly}
           onClick={() => setReadOnly((value) => !value)}
         >
-          {readOnly ? 'Viewing' : 'Editing'}
+          {readOnly ? t('demo.viewing') : t('demo.editing')}
         </button>
       </div>
     </>

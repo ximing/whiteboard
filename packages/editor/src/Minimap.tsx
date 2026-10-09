@@ -1,5 +1,6 @@
 import { boundsOf, frameOf, screenToWorld, type Document, type Point, type View } from '@plume/model';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const WIDTH = 180;
 const HEIGHT = 112;
@@ -54,6 +55,7 @@ export function Minimap({
   viewport: { width: number; height: number };
   onView: (view: View) => void;
 }) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef(false);
 
@@ -118,7 +120,7 @@ export function Minimap({
       data-testid="minimap"
       width={WIDTH}
       height={HEIGHT}
-      aria-label="Minimap"
+      aria-label={t('minimap')}
       onPointerDown={(event) => {
         drag.current = true;
         event.currentTarget.setPointerCapture(event.pointerId);

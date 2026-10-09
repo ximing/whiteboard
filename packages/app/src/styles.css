@@ -18,7 +18,7 @@ body { overflow: hidden; }
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  font-family: Figtree, "Avenir Next", "Segoe UI", sans-serif;
+  font-family: Figtree, "PingFang SC", "Noto Sans SC", "Avenir Next", "Segoe UI", sans-serif;
 }
 
 .boards-current,

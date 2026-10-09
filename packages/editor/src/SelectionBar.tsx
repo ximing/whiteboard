@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Icon } from './icons';
 import { Tip } from './Tip';
 
@@ -27,65 +28,65 @@ export function SelectionBar({
   onUngroup: () => void;
   onLock: (locked: boolean) => void;
 }) {
+  const { t } = useTranslation();
   if (count === 0) return null;
+  const align: { mode: Align; label: string; icon: string }[] = [
+    { mode: 'left', label: t('selection.alignLeft'), icon: 'align-left' },
+    { mode: 'center', label: t('selection.alignCenter'), icon: 'align-center' },
+    { mode: 'right', label: t('selection.alignRight'), icon: 'align-right' },
+    { mode: 'top', label: t('selection.alignTop'), icon: 'align-top' },
+    { mode: 'middle', label: t('selection.alignMiddle'), icon: 'align-middle' },
+    { mode: 'bottom', label: t('selection.alignBottom'), icon: 'align-bottom' },
+  ];
   return (
     <div
       className="selection-bar"
       role="toolbar"
-      aria-label="Selection"
+      aria-label={t('selection.bar')}
       onMouseDown={(event) => {
         if ((event.target as HTMLElement).closest('input, textarea')) return;
         event.preventDefault();
       }}
     >
-      <Tip label="Duplicate">
-        <button type="button" className="tool" aria-label="Duplicate" onClick={onDuplicate}>
+      <Tip label={t('selection.duplicate')}>
+        <button type="button" className="tool" aria-label={t('selection.duplicate')} onClick={onDuplicate}>
           <Icon name="copy" />
         </button>
       </Tip>
-      <Tip label="Forward">
-        <button type="button" className="tool" aria-label="Bring forward" onClick={() => onOrder('forward')}>
+      <Tip label={t('selection.forward')}>
+        <button type="button" className="tool" aria-label={t('selection.forward')} onClick={() => onOrder('forward')}>
           <Icon name="forward" />
         </button>
       </Tip>
-      <Tip label="Backward">
-        <button type="button" className="tool" aria-label="Send backward" onClick={() => onOrder('backward')}>
+      <Tip label={t('selection.backward')}>
+        <button type="button" className="tool" aria-label={t('selection.backward')} onClick={() => onOrder('backward')}>
           <Icon name="backward" />
         </button>
       </Tip>
-      <Tip label="To front">
-        <button type="button" className="tool" aria-label="Bring to front" onClick={() => onOrder('front')}>
+      <Tip label={t('selection.front')}>
+        <button type="button" className="tool" aria-label={t('selection.front')} onClick={() => onOrder('front')}>
           <Icon name="front" />
         </button>
       </Tip>
-      <Tip label="To back">
-        <button type="button" className="tool" aria-label="Send to back" onClick={() => onOrder('back')}>
+      <Tip label={t('selection.back')}>
+        <button type="button" className="tool" aria-label={t('selection.back')} onClick={() => onOrder('back')}>
           <Icon name="back" />
         </button>
       </Tip>
-      <Tip label={locked ? 'Unlock' : 'Lock'}>
-        <button type="button" className="tool" aria-label={locked ? 'Unlock' : 'Lock'} aria-pressed={locked} onClick={() => onLock(!locked)}>
+      <Tip label={locked ? t('selection.unlock') : t('selection.lock')}>
+        <button type="button" className="tool" aria-label={locked ? t('selection.unlock') : t('selection.lock')} aria-pressed={locked} onClick={() => onLock(!locked)}>
           <Icon name={locked ? 'unlock' : 'lock'} />
         </button>
       </Tip>
       {count >= 2 && (
-        <Tip label={grouped ? 'Ungroup' : 'Group'}>
-          <button type="button" className="tool" aria-label={grouped ? 'Ungroup' : 'Group'} onClick={grouped ? onUngroup : onGroup}>
+        <Tip label={grouped ? t('selection.ungroup') : t('selection.group')}>
+          <button type="button" className="tool" aria-label={grouped ? t('selection.ungroup') : t('selection.group')} onClick={grouped ? onUngroup : onGroup}>
             <Icon name={grouped ? 'ungroup' : 'group'} />
           </button>
         </Tip>
       )}
       {count >= 2 &&
-        (
-          [
-            ['left', 'Align left', 'align-left'],
-            ['center', 'Align center', 'align-center'],
-            ['right', 'Align right', 'align-right'],
-            ['top', 'Align top', 'align-top'],
-            ['middle', 'Align middle', 'align-middle'],
-            ['bottom', 'Align bottom', 'align-bottom'],
-          ] as const
-        ).map(([mode, label, icon]) => (
+        align.map(({ mode, label, icon }) => (
           <Tip key={mode} label={label}>
             <button type="button" className="tool" aria-label={label} onClick={() => onAlign(mode)}>
               <Icon name={icon} />
@@ -94,13 +95,13 @@ export function SelectionBar({
         ))}
       {count >= 3 && (
         <>
-          <Tip label="Distribute horizontally">
-            <button type="button" className="tool" aria-label="Distribute horizontally" onClick={() => onDistribute('horizontal')}>
+          <Tip label={t('selection.distributeH')}>
+            <button type="button" className="tool" aria-label={t('selection.distributeH')} onClick={() => onDistribute('horizontal')}>
               <Icon name="distribute-h" />
             </button>
           </Tip>
-          <Tip label="Distribute vertically">
-            <button type="button" className="tool" aria-label="Distribute vertically" onClick={() => onDistribute('vertical')}>
+          <Tip label={t('selection.distributeV')}>
+            <button type="button" className="tool" aria-label={t('selection.distributeV')} onClick={() => onDistribute('vertical')}>
               <Icon name="distribute-v" />
             </button>
           </Tip>

@@ -46,11 +46,14 @@ import {
   type Tool,
 } from '@plume/model';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Board } from './Board';
 import { CommentPanel } from './CommentPanel';
 import { decodeClipboard, encodeClipboard, insertObjects } from './clipboard';
 import { downloadBoardPng, downloadBoardSvg } from './exportBoard';
+import { ExportMenu } from './ExportMenu';
 import { Icon } from './icons';
+import { setLanguage, type PlumeLanguage } from './i18n';
 import { dataUrlImageProvider, type ImageProvider } from './images';
 import { Minimap } from './Minimap';
 import { SelectionBar } from './SelectionBar';
@@ -58,25 +61,11 @@ import { measureStickyHeight, measureTextBox } from './textBox';
 import { Tip } from './Tip';
 import './styles.css';
 
-const TOOLS: { id: Tool; label: string }[] = [
-  { id: 'select', label: 'Select' },
-  { id: 'laser', label: 'Laser' },
-  { id: 'pen', label: 'Pen' },
-  { id: 'highlighter', label: 'Marker' },
-  { id: 'eraser', label: 'Eraser' },
-  { id: 'pan', label: 'Pan' },
-  { id: 'rect', label: 'Rectangle' },
-  { id: 'ellipse', label: 'Ellipse' },
-  { id: 'triangle', label: 'Triangle' },
-  { id: 'line', label: 'Line' },
-  { id: 'arrow', label: 'Arrow' },
-  { id: 'text', label: 'Text' },
-  { id: 'sticky', label: 'Sticky' },
-  { id: 'comment', label: 'Comment' },
-  { id: 'connector', label: 'Connect' },
+const TOOL_GROUPS: Tool[][] = [
+  ['select', 'laser', 'pen', 'highlighter', 'eraser', 'pan'],
+  ['rect', 'ellipse', 'triangle', 'line', 'arrow'],
+  ['text', 'sticky', 'comment', 'connector'],
 ];
-
-const GROUPS = [TOOLS.slice(0, 6), TOOLS.slice(6, 11), TOOLS.slice(11)];
 
 const SWATCHES = [penDefault, '#17324a', '#9f2d22', '#1f7a4d', highlighterDefault, '#7a4e9a', '#d7e3ea'];
 
@@ -166,6 +155,7 @@ export type PlumeEditorProps = {
 };
 
 export function PlumeEditor({ collab, storage, initialDocument, className, imageProvider, readOnly, userName }: PlumeEditorProps) {
+  const { t, i18n } = useTranslation();
   const [editor, setEditor] = useState<EditorState>(() => createEditor(storage?.read?.() ?? initialDocument ?? createDocument()));
   const [tool, setTool] = useState<Tool>('pen');
   const [penColor, setPenColor] = useState(penDefault);
@@ -606,7 +596,9 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
   const grouped = selectedObjects.some((object) => object.groupId);
   const editing = editingId ? objectById(doc, editingId) : undefined;
   const editingBox = editing?.type === 'text' || editing?.type === 'sticky' ? editing : null;
-  const liveText = link === 'offline' ? 'Offline' : peers > 1 ? `${peers} live` : link === 'connecting' ? 'Connecting' : 'Live';
+  const liveText =
+    link === 'offline' ? t('collab.offline') : peers > 1 ? t('collab.peers', { count: peers }) : link === 'connecting' ? t('collab.connecting') : t('collab.live');
+  const language: PlumeLanguage = i18n.language.startsWith('en') ? 'en' : 'zh';
 
   const frameCenter = useCallback(() => {
     const frame = frameRef.current;
@@ -819,12 +811,12 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
         data-dock={dock}
         style={dragPos ? { left: dragPos.x, top: dragPos.y, transform: 'none' } : undefined}
         role="toolbar"
-        aria-label="Tools"
+        aria-label={t('chrome.tools')}
       >
         <div
           className="grip"
-          title="Drag to move the toolbar"
-          aria-label="Drag to move the toolbar"
+          title={t('chrome.drag')}
+          aria-label={t('chrome.drag')}
           onPointerDown={onGripDown}
           onPointerMove={onGripMove}
           onPointerUp={onGripUp}
@@ -832,29 +824,29 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
         >
           <Icon name={dock === 'bottom' ? 'grip-horizontal' : 'grip-vertical'} />
         </div>
-        {GROUPS.map((group, index) => (
-          <div key={group[0].id} className="palette-group">
+        {TOOL_GROUPS.map((group, index) => (
+          <div key={group[0]} className="palette-group">
             {index > 0 && <div className="palette-gap" />}
-            {group.map((item) => (
-              <Tip key={item.id} label={item.label}>
+            {group.map((id) => (
+              <Tip key={id} label={t(`tool.${id}`)}>
                 <button
                   type="button"
                   className="tool"
-                  data-tool={item.id}
-                  aria-label={item.label}
-                  aria-pressed={tool === item.id}
-                  disabled={!!readOnly && item.id !== 'select' && item.id !== 'pan' && item.id !== 'laser'}
-                  onClick={() => setTool(item.id)}
+                  data-tool={id}
+                  aria-label={t(`tool.${id}`)}
+                  aria-pressed={tool === id}
+                  disabled={!!readOnly && id !== 'select' && id !== 'pan' && id !== 'laser'}
+                  onClick={() => setTool(id)}
                 >
-                  <Icon name={item.id} />
+                  <Icon name={id} />
                 </button>
               </Tip>
             ))}
           </div>
         ))}
         <div className="palette-gap" />
-        <Tip label="Image">
-          <button type="button" className="tool" aria-label="Image" disabled={!!readOnly} onClick={() => fileRef.current?.click()}>
+        <Tip label={t('tool.image')}>
+          <button type="button" className="tool" aria-label={t('tool.image')} disabled={!!readOnly} onClick={() => fileRef.current?.click()}>
             <Icon name="image" />
           </button>
         </Tip>
@@ -876,7 +868,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
           className="tray"
           data-dock={dock}
           role="toolbar"
-          aria-label="Style"
+          aria-label={t('chrome.style')}
           onMouseDown={(event) => {
             if ((event.target as HTMLElement).closest('input, textarea')) return;
             event.preventDefault();
@@ -893,7 +885,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 type="button"
                 className={swatch === 'transparent' ? 'swatch none' : 'swatch'}
                 style={swatch === 'transparent' ? undefined : { background: swatch }}
-                aria-label={swatch === 'transparent' ? 'No fill' : swatch}
+                aria-label={swatch === 'transparent' ? t('style.noFill') : swatch}
                 onClick={() => patchSelection({ fill: swatch })}
               />
             ))}
@@ -901,14 +893,14 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
             <>
               {textTarget?.type === 'text' && (
                 <>
-                  <Tip label="Bold">
-                    <button type="button" className="tool" aria-label="Bold" aria-pressed={!!textTarget.bold} onClick={() => patchSelection({ bold: !textTarget.bold })}>
+                  <Tip label={t('style.bold')}>
+                    <button type="button" className="tool" aria-label={t('style.bold')} aria-pressed={!!textTarget.bold} onClick={() => patchSelection({ bold: !textTarget.bold })}>
                       <Icon name="bold" />
                     </button>
                   </Tip>
                   {(['left', 'center', 'right'] as const).map((align) => (
-                    <Tip key={align} label={`Align ${align}`}>
-                      <button type="button" className="tool" aria-label={`Align ${align}`} aria-pressed={(textTarget.align ?? 'left') === align} onClick={() => patchSelection({ align })}>
+                    <Tip key={align} label={t(align === 'left' ? 'style.alignLeft' : align === 'center' ? 'style.alignCenter' : 'style.alignRight')}>
+                      <button type="button" className="tool" aria-label={t(align === 'left' ? 'style.alignLeft' : align === 'center' ? 'style.alignCenter' : 'style.alignRight')} aria-pressed={(textTarget.align ?? 'left') === align} onClick={() => patchSelection({ align })}>
                         <Icon name={align === 'left' ? 'align-left' : align === 'center' ? 'align-center' : 'align-right'} />
                       </button>
                     </Tip>
@@ -919,7 +911,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 type="range"
                 min={12}
                 max={72}
-                aria-label="Font size"
+                aria-label={t('style.fontSize')}
                 value={textTarget?.type === 'text' ? textTarget.fontSize : stickyTarget?.type === 'sticky' ? stickyTarget.fontSize : 18}
                 onChange={(event) => patchSelection({ fontSize: Number(event.target.value) })}
               />
@@ -928,11 +920,11 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
           {styleTargets.connector && connectorTarget?.type === 'connector' && (
             <>
               {(['straight', 'elbow', 'curve'] as const).map((route) => (
-                <Tip key={route} label={route}>
+                <Tip key={route} label={t(route === 'straight' ? 'style.straight' : route === 'elbow' ? 'style.elbow' : 'style.curve')}>
                   <button
                     type="button"
                     className="tool"
-                    aria-label={route}
+                    aria-label={t(route === 'straight' ? 'style.straight' : route === 'elbow' ? 'style.elbow' : 'style.curve')}
                     aria-pressed={(connectorTarget.route ?? 'straight') === route}
                     onClick={() => patchSelection({ route })}
                   >
@@ -941,15 +933,22 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 </Tip>
               ))}
               {(['none', 'end', 'both'] as const).map((arrow) => (
-                <button key={arrow} type="button" className="tool" aria-label={`Arrow ${arrow}`} aria-pressed={(connectorTarget.arrow ?? 'end') === arrow} onClick={() => patchSelection({ arrow })}>
+                <button
+                  key={arrow}
+                  type="button"
+                  className="tool"
+                  aria-label={t(arrow === 'none' ? 'style.arrowNone' : arrow === 'end' ? 'style.arrowEnd' : 'style.arrowBoth')}
+                  aria-pressed={(connectorTarget.arrow ?? 'end') === arrow}
+                  onClick={() => patchSelection({ arrow })}
+                >
                   {arrow === 'none' ? '–' : arrow === 'end' ? '→' : '↔'}
                 </button>
               ))}
               <input
                 className="field"
-                aria-label="Connector label"
+                aria-label={t('style.connectorLabel')}
                 value={labelFocused ? labelDraft : (connectorTarget.label ?? '')}
-                placeholder="Label"
+                placeholder={t('style.labelPlaceholder')}
                 onFocus={() => {
                   setLabelFocused(true);
                   setLabelDraft(connectorTarget.label ?? '');
@@ -964,13 +963,24 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 <select
                   key={side}
                   className="field"
-                  aria-label={side === 'fromSide' ? 'From side' : 'To side'}
+                  aria-label={t(side === 'fromSide' ? 'style.fromSide' : 'style.toSide')}
                   value={connectorTarget[side] ?? 'auto'}
                   onChange={(event) => patchSelection({ [side]: event.target.value as 'auto' | 'top' | 'right' | 'bottom' | 'left' })}
                 >
                   {(['auto', 'top', 'right', 'bottom', 'left'] as const).map((option) => (
                     <option key={option} value={option}>
-                      {side === 'fromSide' ? 'From' : 'To'} {option}
+                      {t(side === 'fromSide' ? 'style.fromSide' : 'style.toSide')}{' '}
+                      {t(
+                        option === 'auto'
+                          ? 'style.sideAuto'
+                          : option === 'top'
+                            ? 'style.sideTop'
+                            : option === 'right'
+                              ? 'style.sideRight'
+                              : option === 'bottom'
+                                ? 'style.sideBottom'
+                                : 'style.sideLeft',
+                      )}
                     </option>
                   ))}
                 </select>
@@ -982,7 +992,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
               type="range"
               min={1}
               max={36}
-              aria-label={styleTargets.size ? 'Stroke size' : 'Line width'}
+              aria-label={styleTargets.size ? t('style.strokeSize') : t('style.lineWidth')}
               value={styleTargets.size && selectedObjects.find((object) => object.type === 'stroke')?.type === 'stroke' ? selectedObjects.find((object) => object.type === 'stroke')!.size : connectorTarget?.type === 'connector' ? connectorTarget.strokeWidth : 2.5}
               onChange={(event) => {
                 const value = Number(event.target.value);
@@ -993,7 +1003,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
         </div>
       )}
       {showInk && (
-        <div className="tray" data-dock={dock} role="toolbar" aria-label="Ink">
+        <div className="tray" data-dock={dock} role="toolbar" aria-label={t('chrome.ink')}>
           {tool !== 'eraser' &&
             SWATCHES.map((swatch) => (
               <button
@@ -1013,13 +1023,13 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 type="button"
                 className={swatch === 'transparent' ? 'swatch none' : 'swatch'}
                 style={swatch === 'transparent' ? undefined : { background: swatch }}
-                aria-label={swatch === 'transparent' ? 'No fill' : `Fill ${swatch}`}
+                aria-label={swatch === 'transparent' ? t('style.noFill') : t('style.fill', { color: swatch })}
                 aria-pressed={shapeFill === swatch}
                 onClick={() => setShapeFill(swatch)}
               />
             ))}
           {tool !== 'eraser' && (
-            <input type="color" aria-label="Custom color" value={toColorInput(color)} onChange={(event) => setActiveColor(event.target.value)} />
+            <input type="color" aria-label={t('style.custom')} value={toColorInput(color)} onChange={(event) => setActiveColor(event.target.value)} />
           )}
           {tool !== 'comment' && tool !== 'laser' && (
             <>
@@ -1027,7 +1037,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
                 type="range"
                 min={1}
                 max={tool === 'eraser' ? 48 : 36}
-                aria-label={tool === 'eraser' ? 'Eraser size' : 'Stroke size'}
+                aria-label={tool === 'eraser' ? t('style.eraserSize') : t('style.strokeSize')}
                 value={size}
                 onChange={(event) => setActiveSize(Number(event.target.value))}
               />
@@ -1036,32 +1046,32 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
           )}
         </div>
       )}
-      <div className="capsule" role="toolbar" aria-label="Board">
+      <div className="capsule" role="toolbar" aria-label={t('chrome.board')}>
         {presenting ? (
-          <span className="live">Presenting</span>
+          <span className="live">{t('chrome.presenting')}</span>
         ) : (
         <>
         {collab && (
           <span className="live" data-testid="collab-status" data-status={link} title={linkDetail ?? collab.label}>
-            <span className="live-kind">{collab.label}</span>
+            <span className="live-kind">{collab.label === 'Server' ? t('collab.server') : collab.label === 'Local' ? t('collab.local') : collab.label}</span>
             {liveText}
           </span>
         )}
-        <Tip label="Undo">
-          <button type="button" className="tool" aria-label="Undo" disabled={!!readOnly || editor.past.length === 0} onClick={() => setEditor((state) => undo(state))}>
+        <Tip label={t('chrome.undo')}>
+          <button type="button" className="tool" aria-label={t('chrome.undo')} disabled={!!readOnly || editor.past.length === 0} onClick={() => setEditor((state) => undo(state))}>
             <Icon name="undo" />
           </button>
         </Tip>
-        <Tip label="Redo">
-          <button type="button" className="tool" aria-label="Redo" disabled={!!readOnly || editor.future.length === 0} onClick={() => setEditor((state) => redo(state))}>
+        <Tip label={t('chrome.redo')}>
+          <button type="button" className="tool" aria-label={t('chrome.redo')} disabled={!!readOnly || editor.future.length === 0} onClick={() => setEditor((state) => redo(state))}>
             <Icon name="redo" />
           </button>
         </Tip>
-        <Tip label="Grid">
+        <Tip label={t('chrome.grid')}>
           <button
             type="button"
             className="tool"
-            aria-label="Grid"
+            aria-label={t('chrome.grid')}
             aria-pressed={showGrid}
             onClick={() => {
               setShowGrid((value) => {
@@ -1073,11 +1083,11 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
             <Icon name="grid" />
           </button>
         </Tip>
-        <Tip label="Snap">
+        <Tip label={t('chrome.snap')}>
           <button
             type="button"
             className="tool"
-            aria-label="Snap"
+            aria-label={t('chrome.snap')}
             aria-pressed={snapEnabled}
             onClick={() => {
               setSnapEnabled((value) => {
@@ -1091,64 +1101,58 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
         </Tip>
         </>
         )}
-        <Tip label="Zoom out">
-          <button type="button" className="tool" aria-label="Zoom out" onClick={() => zoom(1 / 1.1)}>
+        <Tip label={t('chrome.zoomOut')}>
+          <button type="button" className="tool" aria-label={t('chrome.zoomOut')} onClick={() => zoom(1 / 1.1)}>
             <Icon name="zoom-out" />
           </button>
         </Tip>
-        <Tip label="Actual size">
-          <button type="button" className="zoom-label" aria-label="Actual size" onClick={zoomReset}>
+        <Tip label={t('chrome.actual')}>
+          <button type="button" className="zoom-label" aria-label={t('chrome.actual')} onClick={zoomReset}>
             {Math.round(doc.view.zoom * 100)}%
           </button>
         </Tip>
-        <Tip label="Fit">
-          <button type="button" className="tool" aria-label="Fit" onClick={() => fit(selection.length ? selection : undefined)}>
+        <Tip label={t('chrome.fit')}>
+          <button type="button" className="tool" aria-label={t('chrome.fit')} onClick={() => fit(selection.length ? selection : undefined)}>
             <Icon name="fit" />
           </button>
         </Tip>
-        <Tip label="Zoom in">
-          <button type="button" className="tool" aria-label="Zoom in" onClick={() => zoom(1.1)}>
+        <Tip label={t('chrome.zoomIn')}>
+          <button type="button" className="tool" aria-label={t('chrome.zoomIn')} onClick={() => zoom(1.1)}>
             <Icon name="zoom-in" />
           </button>
         </Tip>
+        <Tip label={t('chrome.lang')}>
+          <button
+            type="button"
+            className="tool lang-toggle"
+            aria-label={t('chrome.lang')}
+            onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+          >
+            {language === 'zh' ? '中' : 'EN'}
+          </button>
+        </Tip>
         {presenting ? (
-          <Tip label="Exit presentation">
-            <button type="button" className="tool" aria-label="Exit presentation" onClick={exitPresent}>
-              <span className="tray-label">Exit</span>
+          <Tip label={t('chrome.exitPresent')}>
+            <button type="button" className="tool" aria-label={t('chrome.exitPresent')} onClick={exitPresent}>
+              <span className="tray-label">{t('chrome.exit')}</span>
             </button>
           </Tip>
         ) : (
         <>
-        <Tip label="Export PNG">
-          <button type="button" className="tool" aria-label="Export PNG" onClick={() => void downloadBoardPng(editorRef.current.doc, showGrid)}>
-            <Icon name="export" />
-          </button>
-        </Tip>
-        <Tip label="Export SVG">
-          <button type="button" className="tool" aria-label="Export SVG" onClick={() => downloadBoardSvg(editorRef.current.doc)}>
-            <Icon name="export" />
-            <span className="tray-label">SVG</span>
-          </button>
-        </Tip>
-        {selection.length > 0 && (
-          <Tip label="Export selection">
-            <button
-              type="button"
-              className="tool"
-              aria-label="Export selection"
-              onClick={() => downloadBoardSvg(editorRef.current.doc, expandGroups(editorRef.current.doc, selection))}
-            >
-              <Icon name="export" />
-            </button>
-          </Tip>
-        )}
-        <Tip label={doc.theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+        <ExportMenu
+          gridDefault={showGrid}
+          selectionCount={selection.length}
+          onPng={(includeGrid) => void downloadBoardPng(editorRef.current.doc, includeGrid)}
+          onSvg={() => downloadBoardSvg(editorRef.current.doc)}
+          onSelection={() => downloadBoardSvg(editorRef.current.doc, expandGroups(editorRef.current.doc, selection))}
+        />
+        <Tip label={doc.theme === 'dark' ? t('chrome.themeLight') : t('chrome.themeDark')}>
           <button
             type="button"
             className="tool"
             data-testid="theme-toggle"
             aria-pressed={doc.theme === 'dark'}
-            aria-label={doc.theme === 'dark' ? 'Light theme' : 'Dark theme'}
+            aria-label={doc.theme === 'dark' ? t('chrome.themeLight') : t('chrome.themeDark')}
             disabled={!!readOnly}
             onClick={() => change(setTheme(editorRef.current.doc, doc.theme === 'light' ? 'dark' : 'light'), 'commit')}
           >
@@ -1156,11 +1160,11 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
           </button>
         </Tip>
         {selection.length > 0 && !readOnly && (
-          <Tip label="Delete">
+          <Tip label={t('chrome.delete')}>
             <button
               type="button"
               className="tool"
-              aria-label="Delete selection"
+              aria-label={t('chrome.delete')}
               disabled={locked}
               onClick={() => {
                 const current = editorRef.current.doc;
@@ -1172,8 +1176,8 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
             </button>
           </Tip>
         )}
-        <Tip label="Present">
-          <button type="button" className="tool" aria-label="Present" onClick={enterPresent}>
+        <Tip label={t('chrome.present')}>
+          <button type="button" className="tool" aria-label={t('chrome.present')} onClick={enterPresent}>
             <Icon name="present" />
           </button>
         </Tip>
@@ -1198,12 +1202,12 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
         onLock={(next) => change(setLocked(editorRef.current.doc, selection, next), 'commit')}
       />
       )}
-      {doc.objects.length === 0 && !editingBox && <p className="hint">Put pen to paper — a finger roams the page.</p>}
+      {doc.objects.length === 0 && !editingBox && <p className="hint">{t('hint')}</p>}
       {editingBox && (
         <textarea
           className="text-editor"
           value={editingBox.text}
-          aria-label="Text"
+          aria-label={t('tool.text')}
           autoFocus
           style={{
             left: worldToScreen({ x: editingBox.cx - editingBox.width / 2, y: editingBox.cy - editingBox.height / 2 }, doc.view).x,
@@ -1259,7 +1263,7 @@ export function PlumeEditor({ collab, storage, initialDocument, className, image
             change(setView(editorRef.current.doc, presenter.view), 'view');
           }}
         >
-          Follow {presenter.name || 'presenter'}
+          {presenter.name ? t('follow', { name: presenter.name }) : t('followAnon')}
         </button>
       )}
     </div>
