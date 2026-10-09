@@ -61,6 +61,8 @@ await createPlumeServer({
 
 ## 演示
 
+线上演示：<https://ximing.github.io/whiteboard/>
+
 ```bash
 pnpm install
 pnpm dev
